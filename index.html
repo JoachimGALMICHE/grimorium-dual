@@ -614,12 +614,28 @@ function loadScript(src){
     document.head.appendChild(s);
   });
 }
+async function loadScriptWithFallback(sources){
+  let lastErr = null;
+  for(const src of sources){
+    try{ await loadScript(src); return true; }
+    catch(e){ lastErr = e; }
+  }
+  throw lastErr || new Error('Aucune source de script disponible');
+}
 
 async function initFirebaseFromConfig(config){
   try{
     if(!window.firebase){
-      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-app-compat.min.js');
-      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-firestore-compat.min.js');
+      // gstatic.com (CDN officiel Firebase/Google) en priorité — cdnjs seulement en repli,
+      // car certains navigateurs (protection anti-pistage) bloquent l'accès au stockage pour cdnjs.
+      await loadScriptWithFallback([
+        'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-app-compat.min.js'
+      ]);
+      await loadScriptWithFallback([
+        'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-firestore-compat.min.js'
+      ]);
     }
     if(!firebase.apps.length){ firebase.initializeApp(config); }
     firebaseDb = firebase.firestore();
@@ -629,9 +645,10 @@ async function initFirebaseFromConfig(config){
     firebaseReady = true;
     return true;
   }catch(e){
-    // Repli silencieux sur le stockage Claude si Firebase est indisponible (réseau, CDN bloqué…)
+    // Repli sur le stockage Claude si Firebase est indisponible (réseau, CDN bloqué…)
     firebaseReady = false;
     lastFirebaseErrorCode = (e && (e.code || e.message)) || 'init-failed';
+    console.error('[Grimorium Dual] Échec de chargement/initialisation Firebase :', e);
     return false;
   }
 }
@@ -739,7 +756,8 @@ function updateSyncBadge(){
     el.textContent = '🔒 Sauvegardé sur ce compte Claude uniquement';
     el.className = 'sync-badge warn';
   }else{
-    el.textContent = '⚠ Aucune sauvegarde active — les fiches seront perdues';
+    const detail = lastFirebaseErrorCode ? ` (${lastFirebaseErrorCode})` : '';
+    el.textContent = `⚠ Aucune sauvegarde active${detail}`;
     el.className = 'sync-badge err';
   }
 }
