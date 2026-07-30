@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Livre de Divination — Grimorium Dual</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+<div id="starfield"></div>
+<div id="sync-badge" class="sync-badge"></div>
+<div id="app">
+
+  <div class="book-header">
+    <a class="back-btn" href="index.html">← Retour à l'étagère</a>
+    <div class="book-title">🔮 Livre de Divination</div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-tab="tarot" onclick="switchTab('tarot')">Tarot</button>
+    <button class="tab" data-tab="runes" onclick="switchTab('runes')">Runes</button>
+    <button class="tab" data-tab="journal" onclick="switchTab('journal')">Journal des tirages</button>
+  </div>
+  <div class="page">
+
+    <div class="tab-panel active" id="panel-tarot">
+      <div class="controls">
+        <input class="search-input" id="tarot-search" placeholder="Rechercher une carte…" oninput="renderTarot()">
+      </div>
+      <div class="controls" id="tarot-filters"></div>
+      <div class="card-list" id="tarot-list"></div>
+    </div>
+
+    <div class="tab-panel" id="panel-runes">
+      <div class="controls">
+        <input class="search-input" id="rune-search" placeholder="Rechercher une rune…" oninput="renderRunes()">
+      </div>
+      <div class="card-list" id="rune-list"></div>
+    </div>
+
+    <div class="tab-panel" id="panel-journal">
+      <div class="add-bar">
+        <button class="btn gold" onclick="toggleJournalForm()">+ Nouveau tirage</button>
+      </div>
+      <div class="form-panel" id="journal-form">
+        <div class="form-grid">
+          <div class="form-field">
+            <label>Type de tirage</label>
+            <select id="j-type">
+              <option value="tarot">Tarot</option>
+              <option value="runes">Runes</option>
+              <option value="oracle">Oracle</option>
+              <option value="vision">Vision</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Date</label>
+            <input type="date" id="j-date">
+          </div>
+          <div class="form-field full">
+            <label>Tirage (cartes/runes tirées, position, contexte…)</label>
+            <input type="text" id="j-tirage" placeholder="Ex : Le Bateleur (droit), Trois de Coupes (inversé)…">
+          </div>
+          <div class="form-field full">
+            <label>Message / interprétation tirée</label>
+            <textarea id="j-message" placeholder="Qu'est-ce que ce tirage t'a dit ?"></textarea>
+          </div>
+          <div class="form-field full">
+            <label>Notes complémentaires</label>
+            <textarea id="j-notes" placeholder="Ressenti, contexte, suivi…"></textarea>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn ghost" onclick="toggleJournalForm(false)">Annuler</button>
+          <button class="btn gold" id="j-save-btn" onclick="saveJournalEntry()">Enregistrer</button>
+        </div>
+      </div>
+      <div class="card-list" id="journal-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+/* ============================================================
+   DONNÉES : TAROT
+   ============================================================ */
+const MAJOR_ARCANA = [
+  {n:"0", name:"Le Mat", symbol:"🃏", up:"Nouveau départ, spontanéité, saut dans l'inconnu, confiance naïve.", rev:"Imprudence, précipitation, peur de se lancer, chaos non maîtrisé."},
+  {n:"I", name:"Le Bateleur", symbol:"🎩", up:"Volonté, compétence, ressources disponibles, capacité à concrétiser une idée.", rev:"Manipulation, talents inexploités, manque de concentration, tromperie."},
+  {n:"II", name:"La Papesse", symbol:"🌙", up:"Intuition, mystère, savoir intérieur, patience.", rev:"Secrets cachés, déconnexion de son intuition, superficialité."},
+  {n:"III", name:"L'Impératrice", symbol:"🌾", up:"Abondance, fertilité, créativité, nature nourricière.", rev:"Blocage créatif, dépendance excessive, négligence de soi."},
+  {n:"IV", name:"L'Empereur", symbol:"👑", up:"Autorité, structure, stabilité, contrôle.", rev:"Rigidité, domination, perte de contrôle, autoritarisme."},
+  {n:"V", name:"Le Pape", symbol:"⛪", up:"Tradition, enseignement, conformité, institutions.", rev:"Rébellion contre les normes, dogmatisme, non-conformisme."},
+  {n:"VI", name:"L'Amoureux", symbol:"💞", up:"Choix, union, alignement des valeurs, harmonie.", rev:"Déséquilibre, mauvais choix, désaccord, tentation."},
+  {n:"VII", name:"Le Chariot", symbol:"🐎", up:"Détermination, victoire, maîtrise de soi, avancée.", rev:"Perte de direction, agressivité, manque de contrôle."},
+  {n:"VIII", name:"La Force", symbol:"🦁", up:"Courage doux, patience, maîtrise par la compassion.", rev:"Doute de soi, faiblesse intérieure, impulsivité."},
+  {n:"IX", name:"L'Hermite", symbol:"🏮", up:"Introspection, sagesse solitaire, quête de sens.", rev:"Isolement excessif, retrait du monde, solitude subie."},
+  {n:"X", name:"La Roue de Fortune", symbol:"🎡", up:"Cycles, changement, destin, tournant de vie.", rev:"Revers de fortune, résistance au changement, malchance perçue."},
+  {n:"XI", name:"La Justice", symbol:"⚖️", up:"Équité, vérité, conséquences, équilibre.", rev:"Injustice, malhonnêteté, déséquilibre, fuite des responsabilités."},
+  {n:"XII", name:"Le Pendu", symbol:"🙃", up:"Lâcher-prise, nouvelle perspective, pause nécessaire.", rev:"Résistance, stagnation, sacrifice inutile."},
+  {n:"XIII", name:"La Mort", symbol:"💀", up:"Fin, transformation, renouveau, transition profonde.", rev:"Peur du changement, stagnation, résistance à la transformation."},
+  {n:"XIV", name:"Tempérance", symbol:"🕊️", up:"Équilibre, modération, harmonie, patience.", rev:"Excès, déséquilibre, impatience, manque de vision à long terme."},
+  {n:"XV", name:"Le Diable", symbol:"😈", up:"Attachement, dépendance, part d'ombre, tentation matérielle.", rev:"Libération des chaînes, prise de conscience, rupture avec une dépendance."},
+  {n:"XVI", name:"La Tour", symbol:"🗼", up:"Bouleversement soudain, révélation brutale, effondrement nécessaire.", rev:"Catastrophe évitée de justesse, peur du changement, résistance à l'inévitable."},
+  {n:"XVII", name:"L'Étoile", symbol:"⭐", up:"Espoir, inspiration, guérison, foi en l'avenir.", rev:"Découragement, perte de foi, déconnexion de ses rêves."},
+  {n:"XVIII", name:"La Lune", symbol:"🌕", up:"Illusion, intuition, peurs inconscientes, incertitude.", rev:"Clarté retrouvée, dissipation de la confusion, vérité qui émerge."},
+  {n:"XIX", name:"Le Soleil", symbol:"☀️", up:"Joie, succès, vitalité, clarté.", rev:"Joie ternie, optimisme excessif, retard dans le succès."},
+  {n:"XX", name:"Le Jugement", symbol:"📯", up:"Éveil, bilan, renaissance, appel intérieur.", rev:"Doute de soi, auto-jugement sévère, refus de l'appel."},
+  {n:"XXI", name:"Le Monde", symbol:"🌍", up:"Accomplissement, complétude, intégration, réussite.", rev:"Inachèvement, raccourcis, sentiment d'incomplétude."}
+];
+
+const SUITS = [
+  {key:'batons', name:'Bâtons', symbol:'🔥', domaine:"l'action et la passion"},
+  {key:'coupes', name:'Coupes', symbol:'💧', domaine:"les émotions et les relations"},
+  {key:'epees', name:'Épées', symbol:'🌬️', domaine:"la pensée et la vérité"},
+  {key:'deniers', name:'Deniers', symbol:'🪙', domaine:"le travail et le matériel"}
+];
+
+const RANKS = [
+ {n:'As', up:"Un nouveau départ plein de potentiel dans {D}.", rev:"Une occasion manquée ou un faux départ dans {D}."},
+ {n:'Deux', up:"Un choix ou un équilibre à trouver concernant {D}.", rev:"Une indécision ou un déséquilibre persistant autour de {D}."},
+ {n:'Trois', up:"Premiers résultats et collaboration autour de {D}.", rev:"Un retard ou un désaccord dans une entreprise liée à {D}."},
+ {n:'Quatre', up:"Stabilité, pause méritée ou structure autour de {D}.", rev:"Stagnation ou instabilité cachée dans {D}."},
+ {n:'Cinq', up:"Conflit, compétition ou épreuve à traverser concernant {D}.", rev:"Résolution d'un conflit ou fatigue après la lutte liée à {D}."},
+ {n:'Six', up:"Harmonie, entraide ou générosité autour de {D}.", rev:"Déséquilibre dans le donner-recevoir concernant {D}."},
+ {n:'Sept', up:"Réflexion, stratégie ou remise en question autour de {D}.", rev:"Manque de plan ou doute paralysant lié à {D}."},
+ {n:'Huit', up:"Maîtrise, mouvement rapide ou concentration sur {D}.", rev:"Précipitation ou blocage dans l'avancée de {D}."},
+ {n:'Neuf', up:"Quasi-accomplissement, force intérieure ou solitude autour de {D}.", rev:"Anxiété, épuisement ou peur de l'échec concernant {D}."},
+ {n:'Dix', up:"Accomplissement complet, parfois lourd à porter, autour de {D}.", rev:"Fin difficile ou fardeau excessif lié à {D}."},
+ {n:'Valet', up:"Un messager curieux, apprenti de {D}.", rev:"Immaturité, mauvaises nouvelles ou manque de rigueur autour de {D}."},
+ {n:'Cavalier', up:"Action rapide, quête ou poursuite déterminée liée à {D}.", rev:"Précipitation, imprudence ou action mal dirigée autour de {D}."},
+ {n:'Reine', up:"Maîtrise nourricière et intuitive de {D}.", rev:"Insécurité ou usage égoïste du pouvoir lié à {D}."},
+ {n:'Roi', up:"Maîtrise assurée et autorité naturelle sur {D}.", rev:"Autoritarisme, rigidité ou abus de pouvoir concernant {D}."}
+];
+
+const MINOR_ARCANA = [];
+SUITS.forEach(suit=>{
+  RANKS.forEach(rank=>{
+    MINOR_ARCANA.push({
+      name: rank.n + " de " + suit.name,
+      suit: suit.key,
+      symbol: suit.symbol,
+      up: rank.up.replace('{D}', suit.domaine),
+      rev: rank.rev.replace('{D}', suit.domaine)
+    });
+  });
+});
+
+const ALL_TAROT = [
+  ...MAJOR_ARCANA.map(c=>({...c, suit:'major'})),
+  ...MINOR_ARCANA
+];
+
+/* ============================================================
+   DONNÉES : RUNES (Futhark ancien)
+   ============================================================ */
+const RUNES = [
+  {name:"Fehu", symbol:"ᚠ", up:"Richesse, abondance, succès matériel gagné par l'effort.", rev:"Perte financière, avidité, échec matériel."},
+  {name:"Uruz", symbol:"ᚢ", up:"Force brute, vitalité, endurance physique.", rev:"Faiblesse, occasion manquée, manque de discipline."},
+  {name:"Thurisaz", symbol:"ᚦ", up:"Force protectrice, défense, conflit nécessaire.", rev:"Danger, impulsivité destructrice, vulnérabilité."},
+  {name:"Ansuz", symbol:"ᚨ", up:"Communication, sagesse, message important reçu.", rev:"Malentendu, tromperie, manque de clarté."},
+  {name:"Raidho", symbol:"ᚱ", up:"Voyage, mouvement, progression vers un but.", rev:"Retard, désorientation, changement de plan forcé."},
+  {name:"Kenaz", symbol:"ᚲ", up:"Créativité, illumination, savoir-faire.", rev:"Créativité bloquée, instabilité, perte d'inspiration."},
+  {name:"Gebo", symbol:"ᚷ", up:"Don, échange équilibré, partenariat.", rev:"Déséquilibre dans l'échange, dépendance ou sacrifice excessif."},
+  {name:"Wunjo", symbol:"ᚹ", up:"Joie, harmonie, réussite partagée.", rev:"Tristesse, discorde, retard du bonheur."},
+  {name:"Hagalaz", symbol:"ᚺ", up:"Perturbation soudaine, épreuve inévitable, force de la nature.", rev:"Crise prolongée, chaos incontrôlé."},
+  {name:"Nauthiz", symbol:"ᚾ", up:"Nécessité, contrainte, résilience face au manque.", rev:"Épuisement, manque persistant, résistance inutile."},
+  {name:"Isa", symbol:"ᛁ", up:"Immobilité, gel, patience forcée.", rev:"Blocage prolongé, isolement froid."},
+  {name:"Jera", symbol:"ᛃ", up:"Récolte, cycle accompli, récompense du travail.", rev:"Retard de récolte, cycle interrompu."},
+  {name:"Eihwaz", symbol:"ᛇ", up:"Endurance, résilience, chemin difficile mais stable.", rev:"Instabilité, faiblesse face à l'adversité."},
+  {name:"Perthro", symbol:"ᛈ", up:"Mystère, destin, secrets qui se révèlent.", rev:"Secrets nuisibles, malchance cachée, stagnation."},
+  {name:"Algiz", symbol:"ᛉ", up:"Protection, lien avec le sacré, bouclier.", rev:"Vulnérabilité, protection rompue, danger caché."},
+  {name:"Sowilo", symbol:"ᛊ", up:"Succès, énergie solaire, victoire.", rev:"Faux espoir, énergie mal dirigée."},
+  {name:"Tiwaz", symbol:"ᛏ", up:"Justice, honneur, sacrifice pour une juste cause.", rev:"Injustice, perte d'honneur, conflit mal géré."},
+  {name:"Berkano", symbol:"ᛒ", up:"Croissance, nouveau départ, fertilité.", rev:"Stagnation, problèmes familiaux, croissance entravée."},
+  {name:"Ehwaz", symbol:"ᛖ", up:"Progrès, confiance, partenariat en mouvement.", rev:"Rupture de confiance, changement brutal, désaccord."},
+  {name:"Mannaz", symbol:"ᛗ", up:"Humanité, coopération, conscience de soi.", rev:"Isolement, égoïsme, conflit interpersonnel."},
+  {name:"Laguraz", symbol:"ᛚ", up:"Intuition, flux, adaptation émotionnelle.", rev:"Confusion, peur irrationnelle, déséquilibre émotionnel."},
+  {name:"Ingwaz", symbol:"ᛜ", up:"Accomplissement intérieur, fertilité tranquille, fondation stable.", rev:"Stagnation interne, potentiel non exprimé."},
+  {name:"Dagaz", symbol:"ᛞ", up:"Percée, transformation lumineuse, éveil.", rev:"Refus du changement, stagnation dans l'obscurité."},
+  {name:"Othala", symbol:"ᛟ", up:"Héritage, foyer, valeurs ancestrales.", rev:"Perte d'attache, conflit familial, rupture avec ses racines."}
+];
+
+/* ============================================================
+   ÉTAT
+   ============================================================ */
+let journalEntries = [];
+const expandedTarot = new Set();
+const expandedRunes = new Set();
+const expandedJournal = new Set();
+let tarotFilter = 'all';
+let editingJournalId = null;
+
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===tab));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+tab).classList.add('active');
+}
+
+/* ============================================================
+   TAROT RENDER
+   ============================================================ */
+function renderTarotFilters(){
+  const filters = [
+    {key:'all', label:'Toutes'},
+    {key:'major', label:'Arcanes majeurs'},
+    {key:'batons', label:'Bâtons'},
+    {key:'coupes', label:'Coupes'},
+    {key:'epees', label:'Épées'},
+    {key:'deniers', label:'Deniers'}
+  ];
+  document.getElementById('tarot-filters').innerHTML = filters.map(f=>
+    `<button class="filter-btn ${tarotFilter===f.key?'active':''}" onclick="setTarotFilter('${f.key}')">${f.label}</button>`
+  ).join('');
+}
+function setTarotFilter(key){ tarotFilter = key; renderTarot(); }
+
+function renderTarot(){
+  renderTarotFilters();
+  const q = (document.getElementById('tarot-search').value || '').toLowerCase();
+  let list = ALL_TAROT.filter(c=>{
+    const matchFilter = tarotFilter==='all' || c.suit===tarotFilter;
+    const matchQuery = c.name.toLowerCase().includes(q);
+    return matchFilter && matchQuery;
+  });
+  const el = document.getElementById('tarot-list');
+  if(list.length===0){ el.innerHTML = '<div class="empty-note">Aucune carte ne correspond à ta recherche.</div>'; return; }
+  el.innerHTML = list.map((c)=>{
+    const id = c.name;
+    const open = expandedTarot.has(id);
+    return `
+    <div class="card ${open?'open':''}">
+      <div class="card-header" onclick="toggleTarot('${id.replace(/'/g,"\\'")}')">
+        <div class="symbol">${c.symbol}</div>
+        <div class="titles">
+          <div class="name">${escapeHtml(c.name)}</div>
+          <div class="meta">${c.suit==='major' ? 'Arcane majeur ' + c.n : 'Arcane mineur'}</div>
+        </div>
+        <div class="chevron">▾</div>
+      </div>
+      <div class="card-body">
+        <div class="meaning-block">
+          <div class="meaning-label up">À l'endroit</div>
+          <div class="meaning-text">${escapeHtml(c.up)}</div>
+        </div>
+        <div class="meaning-block">
+          <div class="meaning-label rev">Inversée</div>
+          <div class="meaning-text">${escapeHtml(c.rev)}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function toggleTarot(id){
+  if(expandedTarot.has(id)) expandedTarot.delete(id); else expandedTarot.add(id);
+  renderTarot();
+}
+
+/* ============================================================
+   RUNES RENDER
+   ============================================================ */
+function renderRunes(){
+  const q = (document.getElementById('rune-search').value || '').toLowerCase();
+  const list = RUNES.filter(r=>r.name.toLowerCase().includes(q));
+  const el = document.getElementById('rune-list');
+  if(list.length===0){ el.innerHTML = '<div class="empty-note">Aucune rune ne correspond à ta recherche.</div>'; return; }
+  el.innerHTML = list.map(r=>{
+    const open = expandedRunes.has(r.name);
+    return `
+    <div class="card ${open?'open':''}">
+      <div class="card-header" onclick="toggleRune('${r.name}')">
+        <div class="symbol">${r.symbol}</div>
+        <div class="titles">
+          <div class="name">${escapeHtml(r.name)}</div>
+          <div class="meta">Futhark ancien</div>
+        </div>
+        <div class="chevron">▾</div>
+      </div>
+      <div class="card-body">
+        <div class="meaning-block">
+          <div class="meaning-label up">À l'endroit</div>
+          <div class="meaning-text">${escapeHtml(r.up)}</div>
+        </div>
+        <div class="meaning-block">
+          <div class="meaning-label rev">Inversée</div>
+          <div class="meaning-text">${escapeHtml(r.rev)}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function toggleRune(name){
+  if(expandedRunes.has(name)) expandedRunes.delete(name); else expandedRunes.add(name);
+  renderRunes();
+}
+
+/* ============================================================
+   JOURNAL DES TIRAGES
+   ============================================================ */
+function toggleJournalForm(show){
+  const panel = document.getElementById('journal-form');
+  const willShow = show!==undefined ? show : !panel.classList.contains('open');
+  panel.classList.toggle('open', willShow);
+  if(willShow && !editingJournalId){
+    document.getElementById('j-type').value = 'tarot';
+    document.getElementById('j-date').value = new Date().toISOString().slice(0,10);
+    document.getElementById('j-tirage').value = '';
+    document.getElementById('j-message').value = '';
+    document.getElementById('j-notes').value = '';
+  }
+  if(!willShow){ editingJournalId = null; document.getElementById('j-save-btn').textContent = 'Enregistrer'; }
+}
+async function saveJournalEntry(){
+  const entry = {
+    id: editingJournalId || uid(),
+    type: document.getElementById('j-type').value,
+    date: document.getElementById('j-date').value || new Date().toISOString().slice(0,10),
+    tirage: document.getElementById('j-tirage').value.trim(),
+    message: document.getElementById('j-message').value.trim(),
+    notes: document.getElementById('j-notes').value.trim()
+  };
+  if(!entry.tirage && !entry.message){ alert('Ajoute au moins le tirage ou le message reçu.'); return; }
+  if(editingJournalId){
+    const idx = journalEntries.findIndex(e=>e.id===editingJournalId);
+    if(idx>-1) journalEntries[idx] = entry;
+  }else{
+    journalEntries.unshift(entry);
+  }
+  const result = await saveItem('grimoire_journal', 'divination-journal', journalEntries, entry);
+  const r = saveResultMessage(result, 'Tirage enregistré');
+  showToast(r.msg, r.err);
+  toggleJournalForm(false);
+  renderJournal();
+}
+function editJournalEntry(id){
+  const e = journalEntries.find(x=>x.id===id);
+  if(!e) return;
+  editingJournalId = id;
+  document.getElementById('j-type').value = e.type;
+  document.getElementById('j-date').value = e.date;
+  document.getElementById('j-tirage').value = e.tirage;
+  document.getElementById('j-message').value = e.message;
+  document.getElementById('j-notes').value = e.notes;
+  document.getElementById('j-save-btn').textContent = 'Mettre à jour';
+  toggleJournalForm(true);
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+async function deleteJournalEntry(id){
+  if(!confirm('Supprimer ce tirage du journal ?')) return;
+  journalEntries = journalEntries.filter(e=>e.id!==id);
+  const result = await deleteItem('grimoire_journal', 'divination-journal', journalEntries, id);
+  const r = saveResultMessage(result, 'Tirage supprimé');
+  showToast(r.msg, r.err);
+  renderJournal();
+}
+function toggleJournalCard(id){
+  if(expandedJournal.has(id)) expandedJournal.delete(id); else expandedJournal.add(id);
+  renderJournal();
+}
+function renderJournal(){
+  const el = document.getElementById('journal-list');
+  if(journalEntries.length===0){ el.innerHTML = "<div class=\"empty-note\">Aucun tirage enregistré pour l'instant.</div>"; return; }
+  el.innerHTML = journalEntries.map(e=>{
+    const open = expandedJournal.has(e.id);
+    return `
+    <div class="card ${open?'open':''}">
+      <div class="card-header journal-entry-header" onclick="toggleJournalCard('${e.id}')">
+        <div class="symbol">${e.type==='tarot'?'🎴':e.type==='runes'?'ᚱ':e.type==='oracle'?'🃏':'👁️'}</div>
+        <div class="titles">
+          <div class="name">${escapeHtml(e.date)} <span class="type-tag ${e.type}">${e.type}</span></div>
+          <div class="meta">${escapeHtml((e.tirage||e.message||'').slice(0,60))}${(e.tirage||e.message||'').length>60?'…':''}</div>
+        </div>
+        <div class="chevron">▾</div>
+      </div>
+      <div class="card-body">
+        ${e.tirage?`<div class="meaning-block"><div class="meaning-label up">Tirage</div><div class="meaning-text">${escapeHtml(e.tirage)}</div></div>`:''}
+        ${e.message?`<div class="meaning-block"><div class="meaning-label up">Message reçu</div><div class="meaning-text">${escapeHtml(e.message)}</div></div>`:''}
+        ${e.notes?`<div class="meaning-block"><div class="meaning-label rev">Notes</div><div class="meaning-text">${escapeHtml(e.notes)}</div></div>`:''}
+        <div class="card-actions">
+          <button class="btn small ghost" onclick="editJournalEntry('${e.id}')">Modifier</button>
+          <button class="btn small danger" onclick="deleteJournalEntry('${e.id}')">Supprimer</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+async function loadAll(){
+  await initFirebaseFromConfig(DEFAULT_FIREBASE_CONFIG);
+  updateSyncBadge();
+  try{ journalEntries = await loadList('grimoire_journal', 'divination-journal'); }
+  catch(e){ journalEntries = []; }
+  renderTarot();
+  renderRunes();
+  renderJournal();
+}
+
+initStarfield();
+loadAll();
+</script>
+</body>
+</html>

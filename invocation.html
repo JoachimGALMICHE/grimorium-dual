@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Livre d'Invocation — Grimorium Dual</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+.creature-portrait{
+  width:100%; max-width:260px; max-height:260px; object-fit:cover;
+  border-radius:12px; display:block; margin:0 auto 16px;
+  box-shadow:0 10px 26px rgba(0,0,0,0.3); border:1px solid var(--line);
+}
+</style>
+</head>
+<body>
+<div id="starfield"></div>
+<div id="sync-badge" class="sync-badge"></div>
+<div id="app">
+
+  <div class="book-header">
+    <a class="back-btn" href="index.html">← Retour à l'étagère</a>
+    <div class="book-title">🐾 Livre d'Invocation</div>
+  </div>
+  <div class="page" style="border-radius:12px;">
+    <div class="controls">
+      <input class="search-input" id="beast-search" placeholder="Rechercher une créature…" oninput="renderBestiaire()">
+      <button class="btn gold" onclick="toggleBeastForm()">+ Nouvelle fiche</button>
+    </div>
+    <div class="controls" id="beast-filters"></div>
+
+    <div class="form-panel" id="beast-form">
+      <div class="form-grid">
+        <div class="form-field"><label>Nom</label><input type="text" id="b-name"></div>
+        <div class="form-field"><label>Race</label><input type="text" id="b-race"></div>
+        <div class="form-field">
+          <label>Catégorie</label>
+          <select id="b-category">
+            <option value="Divinité">Divinité</option>
+            <option value="Ancêtre & esprit familier">Ancêtre &amp; esprit familier</option>
+            <option value="Esprit de la nature">Esprit de la nature</option>
+            <option value="Être céleste">Être céleste</option>
+            <option value="Force élémentaire">Force élémentaire</option>
+          </select>
+        </div>
+        <div class="form-field full">
+          <label>Image</label>
+          <input type="file" id="b-image-file" accept="image/*" onchange="handleImageUpload(event)">
+          <div style="display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap;">
+            <img id="b-image-preview" class="creature-img" style="width:52px;height:52px;display:none;">
+            <input type="text" id="b-image" placeholder="ou emoji / URL (optionnel)" style="flex:1; min-width:180px;">
+          </div>
+        </div>
+        <div class="form-field"><label>Domaine de compétence</label><input type="text" id="b-domaine"></div>
+        <div class="form-field"><label>Caractère</label><input type="text" id="b-caractere"></div>
+        <div class="form-field"><label>Habitat</label><input type="text" id="b-habitat"></div>
+        <div class="form-field"><label>Habitude</label><input type="text" id="b-habitude"></div>
+        <div class="form-field full"><label>Comment interagir</label><textarea id="b-interaction"></textarea></div>
+      </div>
+      <div class="form-field full" style="margin-bottom:14px;">
+        <label>Échange (niveau 1 à 5)</label>
+        <div class="exchange-table-wrap">
+        <table class="exchange-table">
+          <thead><tr><th></th><th>Ce que j'offre</th><th>Ce que je reçois</th></tr></thead>
+          <tbody id="b-exchange-rows"></tbody>
+        </table>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn ghost" onclick="toggleBeastForm(false)">Annuler</button>
+        <button class="btn gold" id="b-save-btn" onclick="saveBeast()">Enregistrer la fiche</button>
+      </div>
+    </div>
+
+    <div class="card-list" id="beast-list"></div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+const CATEGORIES = ["Divinité","Ancêtre & esprit familier","Esprit de la nature","Être céleste","Force élémentaire"];
+
+let beasts = [];
+const expandedBeasts = new Set();
+let beastCategoryFilter = 'all';
+let editingBeastId = null;
+let pendingImageData = null; // base64 image en attente de sauvegarde
+
+function renderExchangeRows(data){
+  const rows = data && data.length===5 ? data : [1,2,3,4,5].map(()=>({offre:'',recois:''}));
+  document.getElementById('b-exchange-rows').innerHTML = rows.map((r,i)=>`
+    <tr>
+      <td class="lvl">${i+1}</td>
+      <td><input type="text" class="ex-offre" data-i="${i}" value="${escapeHtml(r.offre)}" placeholder="Ex : confiance, offrande…"></td>
+      <td><input type="text" class="ex-recois" data-i="${i}" value="${escapeHtml(r.recois)}" placeholder="Ex : protection, savoir…"></td>
+    </tr>
+  `).join('');
+}
+
+function renderBeastFilters(){
+  const filters = [{key:'all', label:'Toutes'}, ...CATEGORIES.map(c=>({key:c, label:c}))];
+  document.getElementById('beast-filters').innerHTML = filters.map(f=>
+    `<button class="filter-btn ${beastCategoryFilter===f.key?'active':''}" onclick="setBeastFilter('${f.key.replace(/'/g,"\\'")}')">${escapeHtml(f.label)}</button>`
+  ).join('');
+}
+function setBeastFilter(key){ beastCategoryFilter = key; renderBestiaire(); }
+
+function toggleBeastForm(show){
+  const panel = document.getElementById('beast-form');
+  const willShow = show!==undefined ? show : !panel.classList.contains('open');
+  panel.classList.toggle('open', willShow);
+  if(willShow && !editingBeastId){
+    ['b-name','b-race','b-image','b-domaine','b-caractere','b-habitat','b-habitude','b-interaction'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('b-category').value = CATEGORIES[0];
+    document.getElementById('b-image-file').value = '';
+    document.getElementById('b-image-preview').style.display = 'none';
+    pendingImageData = null;
+    renderExchangeRows();
+  }
+  if(!willShow){ editingBeastId = null; pendingImageData = null; document.getElementById('b-save-btn').textContent = 'Enregistrer la fiche'; }
+}
+
+function handleImageUpload(evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const img = new Image();
+    img.onload = function(){
+      const maxDim = 480;
+      let w = img.width, h = img.height;
+      if(w > h && w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; }
+      else if(h > maxDim){ w = Math.round(w * maxDim / h); h = maxDim; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      pendingImageData = canvas.toDataURL('image/jpeg', 0.72);
+      const preview = document.getElementById('b-image-preview');
+      preview.src = pendingImageData;
+      preview.style.display = 'block';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function saveBeast(){
+  const name = document.getElementById('b-name').value.trim();
+  if(!name){ alert('Donne au moins un nom à la créature.'); return; }
+  const offres = Array.from(document.querySelectorAll('.ex-offre')).map(i=>i.value.trim());
+  const recois = Array.from(document.querySelectorAll('.ex-recois')).map(i=>i.value.trim());
+  const echanges = [0,1,2,3,4].map(i=>({offre:offres[i]||'', recois:recois[i]||''}));
+  const existing = editingBeastId ? beasts.find(b=>b.id===editingBeastId) : null;
+  const image = pendingImageData || document.getElementById('b-image').value.trim() || (existing ? existing.image : '');
+  const beast = {
+    id: editingBeastId || uid(),
+    name,
+    race: document.getElementById('b-race').value.trim(),
+    category: document.getElementById('b-category').value,
+    image,
+    domaine: document.getElementById('b-domaine').value.trim(),
+    caractere: document.getElementById('b-caractere').value.trim(),
+    habitat: document.getElementById('b-habitat').value.trim(),
+    habitude: document.getElementById('b-habitude').value.trim(),
+    interaction: document.getElementById('b-interaction').value.trim(),
+    echanges
+  };
+  if(editingBeastId){
+    const idx = beasts.findIndex(b=>b.id===editingBeastId);
+    if(idx>-1) beasts[idx] = beast;
+  }else{
+    beasts.unshift(beast);
+  }
+  const result = await saveItem('grimoire_beasts', 'bestiaire-creatures', beasts, beast);
+  const r = saveResultMessage(result, 'Fiche enregistrée');
+  showToast(r.msg, r.err);
+  toggleBeastForm(false);
+  renderBestiaire();
+}
+function editBeast(id){
+  const b = beasts.find(x=>x.id===id);
+  if(!b) return;
+  editingBeastId = id;
+  pendingImageData = null;
+  document.getElementById('b-name').value = b.name;
+  document.getElementById('b-race').value = b.race;
+  document.getElementById('b-category').value = b.category || CATEGORIES[0];
+  document.getElementById('b-image-file').value = '';
+  const preview = document.getElementById('b-image-preview');
+  if(b.image && /^(data:|https?:)/.test(b.image)){ preview.src = b.image; preview.style.display = 'block'; document.getElementById('b-image').value=''; }
+  else{ preview.style.display = 'none'; document.getElementById('b-image').value = b.image || ''; }
+  document.getElementById('b-domaine').value = b.domaine;
+  document.getElementById('b-caractere').value = b.caractere;
+  document.getElementById('b-habitat').value = b.habitat;
+  document.getElementById('b-habitude').value = b.habitude;
+  document.getElementById('b-interaction').value = b.interaction;
+  renderExchangeRows(b.echanges);
+  document.getElementById('b-save-btn').textContent = 'Mettre à jour la fiche';
+  toggleBeastForm(true);
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+async function deleteBeast(id){
+  if(!confirm('Supprimer cette fiche de créature ?')) return;
+  beasts = beasts.filter(b=>b.id!==id);
+  const result = await deleteItem('grimoire_beasts', 'bestiaire-creatures', beasts, id);
+  const r = saveResultMessage(result, 'Fiche supprimée');
+  showToast(r.msg, r.err);
+  renderBestiaire();
+}
+function toggleBeastCard(id){
+  if(expandedBeasts.has(id)) expandedBeasts.delete(id); else expandedBeasts.add(id);
+  renderBestiaire();
+}
+function beastThumb(b){
+  if(b.image && /^(data:|https?:\/\/)/.test(b.image)){
+    return `<img class="creature-img" src="${escapeHtml(b.image)}" alt="">`;
+  }
+  return `<div class="creature-img">${b.image ? escapeHtml(b.image) : '🐾'}</div>`;
+}
+function beastHasRealImage(b){
+  return b.image && /^(data:|https?:\/\/)/.test(b.image);
+}
+function renderBestiaire(){
+  renderBeastFilters();
+  const q = (document.getElementById('beast-search').value || '').toLowerCase();
+  const list = beasts.filter(b=>{
+    const matchFilter = beastCategoryFilter==='all' || b.category===beastCategoryFilter;
+    const matchQuery = b.name.toLowerCase().includes(q) || (b.race||'').toLowerCase().includes(q);
+    return matchFilter && matchQuery;
+  });
+  const el = document.getElementById('beast-list');
+  if(list.length===0){ el.innerHTML = "<div class=\"empty-note\">Aucune créature enregistrée pour l'instant.</div>"; return; }
+  el.innerHTML = list.map(b=>{
+    const open = expandedBeasts.has(b.id);
+    return `
+    <div class="card ${open?'open':''}">
+      <div class="card-header" onclick="toggleBeastCard('${b.id}')">
+        ${beastThumb(b)}
+        <div class="titles">
+          <div class="name">${escapeHtml(b.name)}</div>
+          <div class="meta">${escapeHtml(b.race||'Race inconnue')} · ${escapeHtml(b.category||'—')}</div>
+        </div>
+        <div class="chevron">▾</div>
+      </div>
+      <div class="card-body">
+        ${beastHasRealImage(b) ? `<img class="creature-portrait" src="${escapeHtml(b.image)}" alt="${escapeHtml(b.name)}">` : ''}
+        <div class="detail-grid">
+          <div class="detail-item"><div class="label">Catégorie</div><div class="value">${escapeHtml(b.category)||'—'}</div></div>
+          <div class="detail-item"><div class="label">Domaine de compétence</div><div class="value">${escapeHtml(b.domaine)||'—'}</div></div>
+          <div class="detail-item"><div class="label">Caractère</div><div class="value">${escapeHtml(b.caractere)||'—'}</div></div>
+          <div class="detail-item"><div class="label">Habitat</div><div class="value">${escapeHtml(b.habitat)||'—'}</div></div>
+          <div class="detail-item"><div class="label">Habitude</div><div class="value">${escapeHtml(b.habitude)||'—'}</div></div>
+        </div>
+        <div class="detail-item" style="margin-bottom:14px;"><div class="label">Comment interagir</div><div class="value">${escapeHtml(b.interaction)||'—'}</div></div>
+        <div class="detail-item"><div class="label" style="margin-bottom:6px;">Échange</div></div>
+        <div class="exchange-static">
+          <div class="h"></div><div class="h">J'offre</div><div class="h">Je reçois</div>
+          ${(b.echanges||[]).map((ex,i)=>`<div>${i+1}</div><div>${escapeHtml(ex.offre)||'—'}</div><div>${escapeHtml(ex.recois)||'—'}</div>`).join('')}
+        </div>
+        <div class="card-actions">
+          <button class="btn small ghost" onclick="editBeast('${b.id}')">Modifier</button>
+          <button class="btn small danger" onclick="deleteBeast('${b.id}')">Supprimer</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+async function loadAll(){
+  await initFirebaseFromConfig(DEFAULT_FIREBASE_CONFIG);
+  updateSyncBadge();
+  try{ beasts = await loadList('grimoire_beasts', 'bestiaire-creatures'); }
+  catch(e){ beasts = []; }
+  renderBestiaire();
+}
+
+renderExchangeRows();
+initStarfield();
+loadAll();
+</script>
+</body>
+</html>
