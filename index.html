@@ -658,15 +658,17 @@ async function dataGet(key){
   return null;
 }
 async function dataSet(key, value){
+  let firebaseError = null;
   if(firebaseReady){
-    try{ await firebaseDb.collection('grimoire_data').doc(key).set({value}); return true; }
-    catch(e){ firebaseReady = false; updateSyncBadge(); }
+    try{ await firebaseDb.collection('grimoire_data').doc(key).set({value}); return 'firebase'; }
+    catch(e){ firebaseError = e; firebaseReady = false; updateSyncBadge(); }
   }
   if(hasClaudeStorage()){
-    try{ await window.storage.set(key, value, false); return true; }
-    catch(e){ return false; }
+    try{ await window.storage.set(key, value, false); return 'claude'; }
+    catch(e){ /* échec aussi côté Claude */ }
   }
-  return false;
+  if(firebaseError) console.warn('Sauvegarde Firestore refusée :', firebaseError.code || firebaseError.message);
+  return null;
 }
 
 async function loadAll(){
@@ -686,6 +688,12 @@ async function loadAll(){
 
 async function persistJournal(){ return await dataSet('divination-journal', JSON.stringify(journalEntries)); }
 async function persistBeasts(){ return await dataSet('bestiaire-creatures', JSON.stringify(beasts)); }
+
+function saveResultMessage(result, verb){
+  if(result==='firebase') return { msg: verb + ' ✓ (synchronisé sur tous tes appareils)', err:false };
+  if(result==='claude') return { msg: verb + ' ✓ (sauvegardé sur ce compte Claude, pas de sync Firebase)', err:false };
+  return { msg: "Échec : Firestore refuse l'écriture — vérifie les règles de sécurité dans la console Firebase", err:true };
+}
 
 /* ---------- Indicateur de synchronisation & messages ---------- */
 function updateSyncBadge(){
@@ -897,8 +905,9 @@ async function saveJournalEntry(){
   }else{
     journalEntries.unshift(entry);
   }
-  const ok = await persistJournal();
-  showToast(ok ? 'Tirage enregistré ✓' : 'Échec de la sauvegarde — vérifie ta connexion', !ok);
+  const result = await persistJournal();
+  const r = saveResultMessage(result, 'Tirage enregistré');
+  showToast(r.msg, r.err);
   toggleJournalForm(false);
   renderJournal();
 }
@@ -918,8 +927,9 @@ function editJournalEntry(id){
 async function deleteJournalEntry(id){
   if(!confirm('Supprimer ce tirage du journal ?')) return;
   journalEntries = journalEntries.filter(e=>e.id!==id);
-  const ok = await persistJournal();
-  showToast(ok ? 'Tirage supprimé' : 'Échec de la suppression — vérifie ta connexion', !ok);
+  const result = await persistJournal();
+  const r = saveResultMessage(result, 'Tirage supprimé');
+  showToast(r.msg, r.err);
   renderJournal();
 }
 function toggleJournalCard(id){
@@ -1016,8 +1026,9 @@ async function saveBeast(){
   }else{
     beasts.unshift(beast);
   }
-  const ok = await persistBeasts();
-  showToast(ok ? 'Fiche enregistrée ✓' : 'Échec de la sauvegarde — vérifie ta connexion', !ok);
+  const result = await persistBeasts();
+  const r = saveResultMessage(result, 'Fiche enregistrée');
+  showToast(r.msg, r.err);
   toggleBeastForm(false);
   renderBestiaire();
 }
@@ -1046,8 +1057,9 @@ function editBeast(id){
 async function deleteBeast(id){
   if(!confirm('Supprimer cette fiche de créature ?')) return;
   beasts = beasts.filter(b=>b.id!==id);
-  const ok = await persistBeasts();
-  showToast(ok ? 'Fiche supprimée' : 'Échec de la suppression — vérifie ta connexion', !ok);
+  const result = await persistBeasts();
+  const r = saveResultMessage(result, 'Fiche supprimée');
+  showToast(r.msg, r.err);
   renderBestiaire();
 }
 function toggleBeastCard(id){
