@@ -25,7 +25,8 @@
 }
 
 *{box-sizing:border-box;}
-html,body{margin:0;padding:0;}
+html{-webkit-text-size-adjust:100%;}
+html,body{margin:0;padding:0; overflow-x:hidden; max-width:100%;}
 body{
   background:
     radial-gradient(ellipse at 15% 8%, rgba(120,140,220,0.16), transparent 42%),
@@ -67,7 +68,8 @@ h1,h2,h3,.display{
 }
 
 /* ---------- LAYOUT WRAPPER ---------- */
-#app{max-width:1100px;margin:0 auto;padding:32px 20px 90px;}
+#app{max-width:1100px;margin:0 auto;padding:32px 20px 90px; width:100%;}
+@media (max-width:680px){ #app{ padding:20px 14px 70px; } }
 
 /* ---------- SHELF (HOME) ---------- */
 .shelf-title{
@@ -107,7 +109,7 @@ h1,h2,h3,.display{
 .yy-dot{ cursor:pointer; transition:filter .2s; }
 .yy-dot.hovered{ filter:brightness(1.5); }
 
-.yy-captions{ display:flex; gap:46px; }
+.yy-captions{ display:flex; gap:36px; flex-wrap:wrap; justify-content:center; }
 .yy-caption{
   font-family:'Cinzel', serif; font-size:0.95rem; letter-spacing:0.08em; text-transform:uppercase;
   opacity:0.5; transition:opacity .2s, color .2s; cursor:pointer; text-align:center;
@@ -121,25 +123,26 @@ h1,h2,h3,.display{
 @keyframes pageIn{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
 
 .book-header{
-  display:flex; align-items:center; justify-content:space-between;
+  display:flex; align-items:center; justify-content:flex-start;
   margin-bottom:22px; flex-wrap:wrap; gap:12px;
 }
 .back-btn{
   font-family:'Space Mono',monospace; font-size:0.75rem; letter-spacing:0.1em;
   text-transform:uppercase; color:var(--gold-bright); background:none; border:1px solid var(--gold);
-  padding:8px 14px; border-radius:20px; cursor:pointer;
+  padding:10px 14px; border-radius:20px; cursor:pointer; min-height:44px; flex-shrink:0;
 }
 .back-btn:hover{ background:rgba(184,134,59,0.15); }
 
-.book-title{ font-family:'Cinzel Decorative',serif; font-size:1.7rem; color:var(--parchment); }
+.book-title{ font-family:'Cinzel Decorative',serif; font-size:1.7rem; color:var(--parchment); flex:1; text-align:center; min-width:180px; }
 
 /* bookmark tabs */
-.tabs{ display:flex; gap:4px; margin-bottom:0; }
+.tabs{ display:flex; gap:4px; margin-bottom:0; overflow-x:auto; -webkit-overflow-scrolling:touch; }
 .tab{
   font-family:'Cinzel',serif; font-size:0.85rem; letter-spacing:0.04em;
-  padding:11px 20px 13px; border:none; cursor:pointer; color:var(--parchment);
+  padding:12px 18px 14px; border:none; cursor:pointer; color:var(--parchment);
   background:rgba(255,255,255,0.06); border-radius:10px 10px 0 0;
   opacity:0.6; transition:opacity .2s, background .2s; position:relative; top:1px;
+  white-space:nowrap; flex-shrink:0; min-height:44px;
 }
 .tab.active{ opacity:1; background:var(--parchment); color:var(--ink); font-weight:600; }
 .tab:hover:not(.active){ opacity:0.9; }
@@ -168,8 +171,8 @@ h1,h2,h3,.display{
 }
 .filter-btn{
   font-family:'Space Mono',monospace; font-size:0.7rem; letter-spacing:0.08em; text-transform:uppercase;
-  padding:8px 12px; border-radius:16px; border:1px solid var(--line); background:transparent;
-  color:var(--ink-soft); cursor:pointer; opacity:0.7;
+  padding:10px 14px; border-radius:16px; border:1px solid var(--line); background:transparent;
+  color:var(--ink-soft); cursor:pointer; opacity:0.7; min-height:40px;
 }
 .filter-btn.active{ opacity:1; background:var(--ink); color:var(--parchment); border-color:var(--ink); }
 
@@ -200,14 +203,14 @@ h1,h2,h3,.display{
 /* ---------- BUTTONS ---------- */
 .btn{
   font-family:'Cinzel',serif; font-size:0.82rem; letter-spacing:0.03em;
-  padding:9px 18px; border-radius:8px; border:1px solid var(--ink); background:var(--ink); color:var(--parchment);
-  cursor:pointer; transition:transform .15s, opacity .15s;
+  padding:11px 18px; border-radius:8px; border:1px solid var(--ink); background:var(--ink); color:var(--parchment);
+  cursor:pointer; transition:transform .15s, opacity .15s; min-height:44px;
 }
 .btn:hover{ transform:translateY(-1px); opacity:0.9; }
 .btn.ghost{ background:transparent; color:var(--ink); }
 .btn.gold{ background:var(--gold); border-color:var(--gold); color:#1b1712; }
 .btn.danger{ background:transparent; border-color:var(--best); color:var(--best); }
-.btn.small{ padding:5px 12px; font-size:0.72rem; }
+.btn.small{ padding:8px 12px; font-size:0.72rem; min-height:38px; }
 
 .add-bar{ margin-bottom:18px; }
 
@@ -221,19 +224,20 @@ h1,h2,h3,.display{
 .form-grid.full, .form-field.full{ grid-column:1 / -1; }
 .form-field label{ font-family:'Space Mono',monospace; font-size:0.68rem; letter-spacing:0.08em; text-transform:uppercase; display:block; margin-bottom:5px; opacity:0.7; }
 .form-field input, .form-field select, .form-field textarea{
-  width:100%; font-family:'EB Garamond',serif; font-size:1rem; padding:9px 11px;
+  width:100%; font-family:'EB Garamond',serif; font-size:1rem; padding:11px;
   border:1px solid var(--line); border-radius:7px; background:#fff; color:var(--ink);
 }
 .form-field textarea{ resize:vertical; min-height:70px; }
-.form-actions{ display:flex; gap:10px; justify-content:flex-end; }
+.form-actions{ display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; }
 
 /* ---------- EXCHANGE TABLE ---------- */
-.exchange-table{ width:100%; border-collapse:collapse; margin-top:6px; }
+.exchange-table-wrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; margin-top:6px; }
+.exchange-table{ width:100%; min-width:380px; border-collapse:collapse; }
 .exchange-table th{ font-family:'Space Mono',monospace; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.06em; text-align:left; padding:6px 8px; opacity:0.6; border-bottom:1px solid var(--line); }
 .exchange-table td{ padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
 .exchange-table .lvl{ font-family:'Cinzel',serif; font-weight:700; width:30px; text-align:center; }
-.exchange-table input{ width:100%; font-family:'EB Garamond',serif; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink); font-size:0.95rem; }
-.exchange-static{ display:grid; grid-template-columns:34px 1fr 1fr; gap:6px 12px; font-size:0.95rem; }
+.exchange-table input{ width:100%; font-family:'EB Garamond',serif; padding:8px; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink); font-size:0.95rem; }
+.exchange-static{ display:grid; grid-template-columns:24px 1fr 1fr; gap:6px 10px; font-size:0.9rem; }
 .exchange-static .h{ font-family:'Space Mono',monospace; font-size:0.65rem; text-transform:uppercase; opacity:0.55; }
 
 /* creature card thumb */
@@ -259,6 +263,13 @@ h1,h2,h3,.display{
   .form-grid{ grid-template-columns:1fr; }
   .detail-grid{ grid-template-columns:1fr; }
   .card-body{ padding-left:16px; }
+  .book-title{ font-size:1.35rem; min-width:140px; }
+  .yy-caption{ font-size:0.8rem; }
+}
+
+input[type="file"]{
+  font-family:'EB Garamond',serif; font-size:0.9rem; color:var(--ink-soft);
+  max-width:100%;
 }
 
 .save-status{ font-family:'Space Mono',monospace; font-size:0.65rem; opacity:0.5; text-align:right; margin-top:6px; }
@@ -309,7 +320,6 @@ h1,h2,h3,.display{
     <div class="book-header">
       <button class="back-btn" onclick="closeBook()">← Retour à l'étagère</button>
       <div class="book-title">🔮 Livre de Divination</div>
-      <div style="width:160px"></div>
     </div>
     <div class="tabs">
       <button class="tab active" data-tab="tarot" onclick="switchTab('tarot')">Tarot</button>
@@ -381,7 +391,6 @@ h1,h2,h3,.display{
     <div class="book-header">
       <button class="back-btn" onclick="closeBook()">← Retour à l'étagère</button>
       <div class="book-title">🐾 Livre d'Invocation</div>
-      <div style="width:160px"></div>
     </div>
     <div class="page" style="border-radius:12px;">
       <div class="controls">
@@ -407,9 +416,9 @@ h1,h2,h3,.display{
           <div class="form-field full">
             <label>Image</label>
             <input type="file" id="b-image-file" accept="image/*" onchange="handleImageUpload(event)">
-            <div style="display:flex; align-items:center; gap:10px; margin-top:8px;">
+            <div style="display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap;">
               <img id="b-image-preview" class="creature-img" style="width:52px;height:52px;display:none;">
-              <input type="text" id="b-image" placeholder="ou emoji / URL (optionnel)" style="flex:1;">
+              <input type="text" id="b-image" placeholder="ou emoji / URL (optionnel)" style="flex:1; min-width:180px;">
             </div>
           </div>
           <div class="form-field"><label>Domaine de compétence</label><input type="text" id="b-domaine"></div>
@@ -420,10 +429,12 @@ h1,h2,h3,.display{
         </div>
         <div class="form-field full" style="margin-bottom:14px;">
           <label>Échange (niveau 1 à 5)</label>
+          <div class="exchange-table-wrap">
           <table class="exchange-table">
             <thead><tr><th></th><th>Ce que j'offre</th><th>Ce que je reçois</th></tr></thead>
             <tbody id="b-exchange-rows"></tbody>
           </table>
+          </div>
         </div>
         <div class="form-actions">
           <button class="btn ghost" onclick="toggleBeastForm(false)">Annuler</button>
