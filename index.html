@@ -605,6 +605,7 @@ function uid(){ return Date.now().toString(36) + Math.random().toString(36).slic
 /* ---------- Stockage : Claude par défaut, Firebase optionnel ---------- */
 let firebaseDb = null;
 let firebaseReady = false;
+let lastFirebaseErrorCode = null;
 
 function loadScript(src){
   return new Promise((resolve,reject)=>{
@@ -630,6 +631,7 @@ async function initFirebaseFromConfig(config){
   }catch(e){
     // Repli silencieux sur le stockage Claude si Firebase est indisponible (réseau, CDN bloqué…)
     firebaseReady = false;
+    lastFirebaseErrorCode = (e && (e.code || e.message)) || 'init-failed';
     return false;
   }
 }
@@ -645,6 +647,7 @@ async function dataGet(key){
       return doc.exists ? doc.data().value : null;
     }catch(e){
       // Firestore inaccessible : on bascule sur le stockage Claude si disponible
+      lastFirebaseErrorCode = e && (e.code || e.message);
       firebaseReady = false;
       updateSyncBadge();
     }
@@ -658,16 +661,14 @@ async function dataGet(key){
   return null;
 }
 async function dataSet(key, value){
-  let firebaseError = null;
   if(firebaseReady){
     try{ await firebaseDb.collection('grimoire_data').doc(key).set({value}); return 'firebase'; }
-    catch(e){ firebaseError = e; firebaseReady = false; updateSyncBadge(); }
+    catch(e){ lastFirebaseErrorCode = e && (e.code || e.message); firebaseReady = false; updateSyncBadge(); }
   }
   if(hasClaudeStorage()){
     try{ await window.storage.set(key, value, false); return 'claude'; }
     catch(e){ /* échec aussi côté Claude */ }
   }
-  if(firebaseError) console.warn('Sauvegarde Firestore refusée :', firebaseError.code || firebaseError.message);
   return null;
 }
 
@@ -692,7 +693,8 @@ async function persistBeasts(){ return await dataSet('bestiaire-creatures', JSON
 function saveResultMessage(result, verb){
   if(result==='firebase') return { msg: verb + ' ✓ (synchronisé sur tous tes appareils)', err:false };
   if(result==='claude') return { msg: verb + ' ✓ (sauvegardé sur ce compte Claude, pas de sync Firebase)', err:false };
-  return { msg: "Échec : Firestore refuse l'écriture — vérifie les règles de sécurité dans la console Firebase", err:true };
+  const code = lastFirebaseErrorCode ? ` [${lastFirebaseErrorCode}]` : '';
+  return { msg: `Échec de la sauvegarde${code} — note ce code et dis-le à Claude`, err:true };
 }
 
 /* ---------- Indicateur de synchronisation & messages ---------- */
