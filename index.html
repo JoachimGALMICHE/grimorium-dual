@@ -640,13 +640,15 @@ function hasClaudeStorage(){
   return typeof window.storage !== 'undefined' && window.storage !== null;
 }
 
-async function dataGet(key){
+/* Chargement d'une liste entière (Firestore : une collection ; Claude : un tableau JSON dans une clé) */
+async function loadList(collectionName, claudeKey){
   if(firebaseReady){
     try{
-      const doc = await firebaseDb.collection('grimoire_data').doc(key).get({source:'server'});
-      return doc.exists ? doc.data().value : null;
+      const snap = await firebaseDb.collection(collectionName).get({source:'server'});
+      const arr = [];
+      snap.forEach(doc=>arr.push(doc.data()));
+      return arr;
     }catch(e){
-      // Firestore inaccessible : on bascule sur le stockage Claude si disponible
       lastFirebaseErrorCode = e && (e.code || e.message);
       firebaseReady = false;
       updateSyncBadge();
@@ -654,19 +656,32 @@ async function dataGet(key){
   }
   if(hasClaudeStorage()){
     try{
-      const r = await window.storage.get(key, false);
-      return r ? r.value : null;
-    }catch(e){ return null; }
+      const r = await window.storage.get(claudeKey, false);
+      return r ? JSON.parse(r.value) : [];
+    }catch(e){ return []; }
   }
-  return null;
+  return [];
 }
-async function dataSet(key, value){
+
+/* Sauvegarde d'un seul élément : un document Firestore par fiche (évite la limite de ~1 Mo par document) */
+async function saveItem(collectionName, claudeKey, list, item){
   if(firebaseReady){
-    try{ await firebaseDb.collection('grimoire_data').doc(key).set({value}); return 'firebase'; }
+    try{ await firebaseDb.collection(collectionName).doc(item.id).set(item); return 'firebase'; }
     catch(e){ lastFirebaseErrorCode = e && (e.code || e.message); firebaseReady = false; updateSyncBadge(); }
   }
   if(hasClaudeStorage()){
-    try{ await window.storage.set(key, value, false); return 'claude'; }
+    try{ await window.storage.set(claudeKey, JSON.stringify(list), false); return 'claude'; }
+    catch(e){ /* échec aussi côté Claude */ }
+  }
+  return null;
+}
+async function deleteItem(collectionName, claudeKey, list, id){
+  if(firebaseReady){
+    try{ await firebaseDb.collection(collectionName).doc(id).delete(); return 'firebase'; }
+    catch(e){ lastFirebaseErrorCode = e && (e.code || e.message); firebaseReady = false; updateSyncBadge(); }
+  }
+  if(hasClaudeStorage()){
+    try{ await window.storage.set(claudeKey, JSON.stringify(list), false); return 'claude'; }
     catch(e){ /* échec aussi côté Claude */ }
   }
   return null;
@@ -676,9 +691,9 @@ async function loadAll(){
   await initFirebaseFromConfig(DEFAULT_FIREBASE_CONFIG);
   updateSyncBadge();
 
-  try{ const j = await dataGet('divination-journal'); journalEntries = j ? JSON.parse(j) : []; }
+  try{ journalEntries = await loadList('grimoire_journal', 'divination-journal'); }
   catch(e){ journalEntries = []; }
-  try{ const b = await dataGet('bestiaire-creatures'); beasts = b ? JSON.parse(b) : []; }
+  try{ beasts = await loadList('grimoire_beasts', 'bestiaire-creatures'); }
   catch(e){ beasts = []; }
 
   renderTarot();
@@ -687,8 +702,10 @@ async function loadAll(){
   renderBestiaire();
 }
 
-async function persistJournal(){ return await dataSet('divination-journal', JSON.stringify(journalEntries)); }
-async function persistBeasts(){ return await dataSet('bestiaire-creatures', JSON.stringify(beasts)); }
+async function persistJournalItem(entry){ return await saveItem('grimoire_journal', 'divination-journal', journalEntries, entry); }
+async function persistBeastItem(beast){ return await saveItem('grimoire_beasts', 'bestiaire-creatures', beasts, beast); }
+async function removeJournalItem(id){ return await deleteItem('grimoire_journal', 'divination-journal', journalEntries, id); }
+async function removeBeastItem(id){ return await deleteItem('grimoire_beasts', 'bestiaire-creatures', beasts, id); }
 
 function saveResultMessage(result, verb){
   if(result==='firebase') return { msg: verb + ' ✓ (synchronisé sur tous tes appareils)', err:false };
@@ -907,7 +924,7 @@ async function saveJournalEntry(){
   }else{
     journalEntries.unshift(entry);
   }
-  const result = await persistJournal();
+  const result = await persistJournalItem(entry);
   const r = saveResultMessage(result, 'Tirage enregistré');
   showToast(r.msg, r.err);
   toggleJournalForm(false);
@@ -929,7 +946,7 @@ function editJournalEntry(id){
 async function deleteJournalEntry(id){
   if(!confirm('Supprimer ce tirage du journal ?')) return;
   journalEntries = journalEntries.filter(e=>e.id!==id);
-  const result = await persistJournal();
+  const result = await removeJournalItem(id);
   const r = saveResultMessage(result, 'Tirage supprimé');
   showToast(r.msg, r.err);
   renderJournal();
@@ -1028,7 +1045,7 @@ async function saveBeast(){
   }else{
     beasts.unshift(beast);
   }
-  const result = await persistBeasts();
+  const result = await persistBeastItem(beast);
   const r = saveResultMessage(result, 'Fiche enregistrée');
   showToast(r.msg, r.err);
   toggleBeastForm(false);
@@ -1059,7 +1076,7 @@ function editBeast(id){
 async function deleteBeast(id){
   if(!confirm('Supprimer cette fiche de créature ?')) return;
   beasts = beasts.filter(b=>b.id!==id);
-  const result = await persistBeasts();
+  const result = await removeBeastItem(id);
   const r = saveResultMessage(result, 'Fiche supprimée');
   showToast(r.msg, r.err);
   renderBestiaire();
