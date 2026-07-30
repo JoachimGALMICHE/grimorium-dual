@@ -639,9 +639,8 @@ async function initFirebaseFromConfig(config){
     }
     if(!firebase.apps.length){ firebase.initializeApp(config); }
     firebaseDb = firebase.firestore();
-    // Le streaming WebChannel par défaut est bloqué dans certains bacs à sable :
-    // on force le long polling, plus lent mais fiable partout.
-    firebaseDb.settings({ experimentalForceLongPolling: true, useFetchStreams: false });
+    // Le SDK détecte déjà automatiquement s'il faut basculer en long polling
+    // (streaming WebChannel bloqué) — aucun réglage manuel n'est nécessaire ici.
     firebaseReady = true;
     return true;
   }catch(e){
