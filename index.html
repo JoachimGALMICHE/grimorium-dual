@@ -664,10 +664,24 @@ async function loadList(collectionName, claudeKey){
 }
 
 /* Sauvegarde d'un seul élément : un document Firestore par fiche (évite la limite de ~1 Mo par document) */
+const CONNECTIVITY_CODES = ['unavailable','permission-denied','unauthenticated','not-found','failed-precondition','resource-exhausted'];
+function recordFirebaseError(e, context){
+  const code = e && e.code ? e.code : 'unknown';
+  const message = e && e.message ? e.message : String(e);
+  lastFirebaseErrorCode = code + (message ? ' — ' + message : '');
+  console.error('[Grimorium Dual] Firestore ' + context + ' a échoué :', e);
+  // On ne coupe Firestore que pour de vraies pannes de connexion/permission,
+  // pas pour une erreur liée aux données d'une seule fiche (invalid-argument…)
+  if(CONNECTIVITY_CODES.includes(code)){
+    firebaseReady = false;
+    updateSyncBadge();
+  }
+}
+
 async function saveItem(collectionName, claudeKey, list, item){
   if(firebaseReady){
     try{ await firebaseDb.collection(collectionName).doc(item.id).set(item); return 'firebase'; }
-    catch(e){ lastFirebaseErrorCode = e && (e.code || e.message); firebaseReady = false; updateSyncBadge(); }
+    catch(e){ recordFirebaseError(e, 'set'); }
   }
   if(hasClaudeStorage()){
     try{ await window.storage.set(claudeKey, JSON.stringify(list), false); return 'claude'; }
@@ -678,7 +692,7 @@ async function saveItem(collectionName, claudeKey, list, item){
 async function deleteItem(collectionName, claudeKey, list, id){
   if(firebaseReady){
     try{ await firebaseDb.collection(collectionName).doc(id).delete(); return 'firebase'; }
-    catch(e){ lastFirebaseErrorCode = e && (e.code || e.message); firebaseReady = false; updateSyncBadge(); }
+    catch(e){ recordFirebaseError(e, 'delete'); }
   }
   if(hasClaudeStorage()){
     try{ await window.storage.set(claudeKey, JSON.stringify(list), false); return 'claude'; }
