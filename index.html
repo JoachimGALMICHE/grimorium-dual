@@ -273,10 +273,31 @@ input[type="file"]{
 }
 
 .save-status{ font-family:'Space Mono',monospace; font-size:0.65rem; opacity:0.5; text-align:right; margin-top:6px; }
+
+.sync-badge{
+  position:fixed; bottom:14px; left:14px; z-index:5;
+  font-family:'Space Mono',monospace; font-size:0.65rem; letter-spacing:0.04em;
+  padding:6px 12px; border-radius:14px; background:rgba(0,0,0,0.45); backdrop-filter:blur(4px);
+  border:1px solid rgba(255,255,255,0.15); color:var(--parchment); opacity:0.85;
+}
+.sync-badge.ok{ border-color:rgba(127,191,106,0.5); color:#bfe6b0; }
+.sync-badge.warn{ border-color:rgba(217,169,79,0.5); color:var(--gold-bright); }
+.sync-badge.err{ border-color:rgba(224,138,138,0.6); color:#f0a8a8; }
+
+.toast{
+  position:fixed; bottom:52px; left:50%; transform:translateX(-50%) translateY(20px);
+  font-family:'Cinzel',serif; font-size:0.85rem; padding:12px 22px; border-radius:24px;
+  background:var(--ink); color:var(--parchment); border:1px solid var(--gold);
+  z-index:20; opacity:0; pointer-events:none; transition:opacity .25s, transform .25s;
+  max-width:80vw; text-align:center;
+}
+.toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+.toast.err{ border-color:var(--best); }
 </style>
 </head>
 <body>
 <div id="starfield"></div>
+<div id="sync-badge" class="sync-badge"></div>
 <div id="app">
 
   <!-- HOME SHELF -->
@@ -613,33 +634,44 @@ async function initFirebaseFromConfig(config){
   }
 }
 
+function hasClaudeStorage(){
+  return typeof window.storage !== 'undefined' && window.storage !== null;
+}
+
 async function dataGet(key){
   if(firebaseReady){
     try{
       const doc = await firebaseDb.collection('grimoire_data').doc(key).get({source:'server'});
       return doc.exists ? doc.data().value : null;
     }catch(e){
-      // Firestore inaccessible : on bascule silencieusement et durablement sur le stockage Claude
+      // Firestore inaccessible : on bascule sur le stockage Claude si disponible
       firebaseReady = false;
+      updateSyncBadge();
     }
   }
-  try{
-    const r = await window.storage.get(key, false);
-    return r ? r.value : null;
-  }catch(e){ return null; }
+  if(hasClaudeStorage()){
+    try{
+      const r = await window.storage.get(key, false);
+      return r ? r.value : null;
+    }catch(e){ return null; }
+  }
+  return null;
 }
 async function dataSet(key, value){
   if(firebaseReady){
-    try{ await firebaseDb.collection('grimoire_data').doc(key).set({value}); return; }
-    catch(e){ firebaseReady = false; }
+    try{ await firebaseDb.collection('grimoire_data').doc(key).set({value}); return true; }
+    catch(e){ firebaseReady = false; updateSyncBadge(); }
   }
-  try{ await window.storage.set(key, value, false); }
-  catch(e){ /* dernier recours : la sauvegarde a échoué silencieusement */ }
+  if(hasClaudeStorage()){
+    try{ await window.storage.set(key, value, false); return true; }
+    catch(e){ return false; }
+  }
+  return false;
 }
 
 async function loadAll(){
-  // Reconnexion : config enregistrée en priorité, sinon la config par défaut du Grimoire
   await initFirebaseFromConfig(DEFAULT_FIREBASE_CONFIG);
+  updateSyncBadge();
 
   try{ const j = await dataGet('divination-journal'); journalEntries = j ? JSON.parse(j) : []; }
   catch(e){ journalEntries = []; }
@@ -652,8 +684,37 @@ async function loadAll(){
   renderBestiaire();
 }
 
-async function persistJournal(){ await dataSet('divination-journal', JSON.stringify(journalEntries)); }
-async function persistBeasts(){ await dataSet('bestiaire-creatures', JSON.stringify(beasts)); }
+async function persistJournal(){ return await dataSet('divination-journal', JSON.stringify(journalEntries)); }
+async function persistBeasts(){ return await dataSet('bestiaire-creatures', JSON.stringify(beasts)); }
+
+/* ---------- Indicateur de synchronisation & messages ---------- */
+function updateSyncBadge(){
+  const el = document.getElementById('sync-badge');
+  if(!el) return;
+  if(firebaseReady){
+    el.textContent = '☁ Synchronisé (Firebase)';
+    el.className = 'sync-badge ok';
+  }else if(hasClaudeStorage()){
+    el.textContent = '🔒 Sauvegardé sur ce compte Claude uniquement';
+    el.className = 'sync-badge warn';
+  }else{
+    el.textContent = '⚠ Aucune sauvegarde active — les fiches seront perdues';
+    el.className = 'sync-badge err';
+  }
+}
+function showToast(msg, isError){
+  let el = document.getElementById('toast');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.className = 'toast show' + (isError ? ' err' : '');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(()=>{ el.className = 'toast'; }, 2600);
+}
+
 
 /* ---------- Yin-Yang home ---------- */
 function pauseYY(on){
@@ -836,7 +897,8 @@ async function saveJournalEntry(){
   }else{
     journalEntries.unshift(entry);
   }
-  await persistJournal();
+  const ok = await persistJournal();
+  showToast(ok ? 'Tirage enregistré ✓' : 'Échec de la sauvegarde — vérifie ta connexion', !ok);
   toggleJournalForm(false);
   renderJournal();
 }
@@ -856,7 +918,8 @@ function editJournalEntry(id){
 async function deleteJournalEntry(id){
   if(!confirm('Supprimer ce tirage du journal ?')) return;
   journalEntries = journalEntries.filter(e=>e.id!==id);
-  await persistJournal();
+  const ok = await persistJournal();
+  showToast(ok ? 'Tirage supprimé' : 'Échec de la suppression — vérifie ta connexion', !ok);
   renderJournal();
 }
 function toggleJournalCard(id){
@@ -953,7 +1016,8 @@ async function saveBeast(){
   }else{
     beasts.unshift(beast);
   }
-  await persistBeasts();
+  const ok = await persistBeasts();
+  showToast(ok ? 'Fiche enregistrée ✓' : 'Échec de la sauvegarde — vérifie ta connexion', !ok);
   toggleBeastForm(false);
   renderBestiaire();
 }
@@ -982,7 +1046,8 @@ function editBeast(id){
 async function deleteBeast(id){
   if(!confirm('Supprimer cette fiche de créature ?')) return;
   beasts = beasts.filter(b=>b.id!==id);
-  await persistBeasts();
+  const ok = await persistBeasts();
+  showToast(ok ? 'Fiche supprimée' : 'Échec de la suppression — vérifie ta connexion', !ok);
   renderBestiaire();
 }
 function toggleBeastCard(id){
